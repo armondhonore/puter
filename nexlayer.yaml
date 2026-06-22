@@ -1,0 +1,18 @@
+application:
+  name: puter
+  pods:
+  - name: app
+    image: ghcr.io/heyputer/puter:latest
+    path: /
+    servicePorts:
+    - 4100
+    vars:
+      PUTER_DEFAULT_USER: admin
+      PUTER_DEFAULT_USER_PASSWORD: nexlayer2024
+    volumes:
+    - name: puter-config
+      mountPath: /etc/puter
+      size: 1Gi
+    - name: puter-data
+      mountPath: /var/puter
+      size: 20Gi
