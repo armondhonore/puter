@@ -2,7 +2,6 @@ application:
   name: puter
   pods:
   - name: app
-    image: ghcr.io/heyputer/puter:latest
     path: /
     servicePorts:
     - 4100
