@@ -2,17 +2,29 @@ application:
   name: puter
   pods:
   - name: app
-    image: ghcr.io/puter-software/puter:latest
+    image: ghcr.io/heyputer/puter:latest
     path: /
+    # Two fixes baked into the boot command (string form per the redeploy schema):
+    #
+    # 1) Skip the broken telemetry preload. The published image's default CMD is
+    #    `node -r ./dist/src/backend/telemetry.js ./dist/src/backend/index.js`, but
+    #    telemetry.js requires @opentelemetry/auto-instrumentations-node — declared in
+    #    src/backend/package.json yet MISSING from the stale published image, so the
+    #    container crashloops with MODULE_NOT_FOUND. telemetry.js is a standalone OTLP
+    #    exporter (index.js never imports it; no collector here), so we boot index.js
+    #    directly without the -r preload.
+    #
+    # 2) Write a runtime config override to a node-writable path. The image runs as
+    #    USER node, but /opt/puter (and any PVC mounted over it) is root-owned, so
+    #    puter's default relative data paths (volatile/runtime/*) fail with EACCES.
+    #    We point sqlite + the local S3 (fauxqs) at /tmp/puter (world-writable) and run
+    #    DynamoDB (dynalite) in-memory so nothing needs a persistent root-owned mount.
+    #    We also set domain/protocol/static-hosting domains to the deploy host so the
+    #    app recognizes the public host instead of 404-ing on the default puter.localhost.
+    #    (Data is ephemeral — fine for this test deployment.)
+    command: sh -c "mkdir -p /tmp/puter/runtime && echo eyJkb21haW4iOiAicmVsYXhlZC13ZWFzZWwtcHV0ZXIuY2xvdWQubmV4bGF5ZXIuYWkiLCAicHJvdG9jb2wiOiAiaHR0cHMiLCAiYWxsb3dfYWxsX2hvc3RfdmFsdWVzIjogdHJ1ZSwgInN0YXRpY19ob3N0aW5nX2RvbWFpbiI6ICJzaXRlLnJlbGF4ZWQtd2Vhc2VsLXB1dGVyLmNsb3VkLm5leGxheWVyLmFpIiwgInN0YXRpY19ob3N0aW5nX2RvbWFpbl9hbHQiOiAiaG9zdC5yZWxheGVkLXdlYXNlbC1wdXRlci5jbG91ZC5uZXhsYXllci5haSIsICJwcml2YXRlX2FwcF9ob3N0aW5nX2RvbWFpbiI6ICJhcHAucmVsYXhlZC13ZWFzZWwtcHV0ZXIuY2xvdWQubmV4bGF5ZXIuYWkiLCAiZGF0YWJhc2UiOiB7ImVuZ2luZSI6ICJzcWxpdGUiLCAicGF0aCI6ICIvdG1wL3B1dGVyL3J1bnRpbWUvcHV0ZXItZGF0YWJhc2Uuc3FsaXRlIn0sICJzMyI6IHsibG9jYWxDb25maWciOiB7ImRhdGFEaXIiOiAiL3RtcC9wdXRlci9ydW50aW1lL2ZhdXhxcy1kYXRhIiwgInMzU3RvcmFnZURpciI6ICIvdG1wL3B1dGVyL3J1bnRpbWUvZmF1eHFzLXMzLWRhdGEifX0sICJkeW5hbW8iOiB7ImluTWVtb3J5IjogdHJ1ZX19 | base64 -d > /tmp/puter/config.json && export PUTER_CONFIG_PATH=/tmp/puter/config.json && exec node ./dist/src/backend/index.js"
     servicePorts:
     - 4100
     vars:
       PUTER_DEFAULT_USER: admin
       PUTER_DEFAULT_USER_PASSWORD: nexlayer2024
-    volumes:
-    - name: puter-config
-      mountPath: /etc/puter
-      size: 1Gi
-    - name: puter-data
-      mountPath: /var/puter
-      size: 20Gi
