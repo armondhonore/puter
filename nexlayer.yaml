@@ -2,27 +2,30 @@ application:
   name: puter
   pods:
   - name: app
-    image: ghcr.io/heyputer/puter:latest
+    # Source-built image from pipeline 19f0eb4d7b7 — built from this branch's
+    # Dockerfile, so it CONTAINS the subdomain-redirect fix in
+    # src/backend/server.ts + src/backend/core/http/middleware/hostRedirects.ts.
+    # Pinned explicitly (not "# filled by pipeline") so the /redeploy path
+    # (DeployOnly: yaml verbatim, no analyzer, no cache, no bot) deploys exactly
+    # this patched image instead of the published ghcr.io/heyputer/puter:latest,
+    # which lacks the patch.
+    image: registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/puter:19f0eb4d7b7
     path: /
-    # Two fixes baked into the boot command (string form per the redeploy schema):
+    # ROOT CAUSE of the in-browser ERR_SSL_PROTOCOL_ERROR (curl only saw a 302):
+    # puter used Express's default `subdomain offset` of 2, so the 4-label deploy
+    # host relaxed-weasel-puter.cloud.nexlayer.ai was misread as a user-site
+    # subdomain and `/` 302-redirected to site.relaxed-weasel-puter.cloud.
+    # nexlayer.ai — a subdomain with NO Nexlayer TLS cert, so the browser failed
+    # the TLS handshake. The source fix derives the offset from config.domain so
+    # the apex serves the desktop GUI directly on the same (cert-valid) host.
     #
-    # 1) Skip the broken telemetry preload. The published image's default CMD is
-    #    `node -r ./dist/src/backend/telemetry.js ./dist/src/backend/index.js`, but
-    #    telemetry.js requires @opentelemetry/auto-instrumentations-node — declared in
-    #    src/backend/package.json yet MISSING from the stale published image, so the
-    #    container crashloops with MODULE_NOT_FOUND. telemetry.js is a standalone OTLP
-    #    exporter (index.js never imports it; no collector here), so we boot index.js
-    #    directly without the -r preload.
-    #
-    # 2) Write a runtime config override to a node-writable path. The image runs as
-    #    USER node, but /opt/puter (and any PVC mounted over it) is root-owned, so
-    #    puter's default relative data paths (volatile/runtime/*) fail with EACCES.
-    #    We point sqlite + the local S3 (fauxqs) at /tmp/puter (world-writable) and run
-    #    DynamoDB (dynalite) in-memory so nothing needs a persistent root-owned mount.
-    #    We also set domain/protocol/static-hosting domains to the deploy host so the
-    #    app recognizes the public host instead of 404-ing on the default puter.localhost.
-    #    (Data is ephemeral — fine for this test deployment.)
-    command: sh -c "mkdir -p /tmp/puter/runtime && echo eyJkb21haW4iOiAicmVsYXhlZC13ZWFzZWwtcHV0ZXIuY2xvdWQubmV4bGF5ZXIuYWkiLCAicHJvdG9jb2wiOiAiaHR0cHMiLCAiYWxsb3dfYWxsX2hvc3RfdmFsdWVzIjogdHJ1ZSwgInN0YXRpY19ob3N0aW5nX2RvbWFpbiI6ICJzaXRlLnJlbGF4ZWQtd2Vhc2VsLXB1dGVyLmNsb3VkLm5leGxheWVyLmFpIiwgInN0YXRpY19ob3N0aW5nX2RvbWFpbl9hbHQiOiAiaG9zdC5yZWxheGVkLXdlYXNlbC1wdXRlci5jbG91ZC5uZXhsYXllci5haSIsICJwcml2YXRlX2FwcF9ob3N0aW5nX2RvbWFpbiI6ICJhcHAucmVsYXhlZC13ZWFzZWwtcHV0ZXIuY2xvdWQubmV4bGF5ZXIuYWkiLCAiZGF0YWJhc2UiOiB7ImVuZ2luZSI6ICJzcWxpdGUiLCAicGF0aCI6ICIvdG1wL3B1dGVyL3J1bnRpbWUvcHV0ZXItZGF0YWJhc2Uuc3FsaXRlIn0sICJzMyI6IHsibG9jYWxDb25maWciOiB7ImRhdGFEaXIiOiAiL3RtcC9wdXRlci9ydW50aW1lL2ZhdXhxcy1kYXRhIiwgInMzU3RvcmFnZURpciI6ICIvdG1wL3B1dGVyL3J1bnRpbWUvZmF1eHFzLXMzLWRhdGEifX0sICJkeW5hbW8iOiB7ImluTWVtb3J5IjogdHJ1ZX19 | base64 -d > /tmp/puter/config.json && export PUTER_CONFIG_PATH=/tmp/puter/config.json && exec node ./dist/src/backend/index.js"
+    # Boot: write runtime config to /tmp/puter (node-writable; /opt/puter is
+    # root-owned). sqlite + local S3 (fauxqs) under /tmp/puter, DynamoDB
+    # in-memory — ephemeral, fine for this test deploy. Config sets
+    # protocol=https + trust_proxy=1 (so req.protocol is https behind the edge,
+    # else puter loops to http) and hosting domains as distinct sub-subdomains
+    # (never the apex), so nothing redirects off the cert-valid apex.
+    command: sh -c "mkdir -p /tmp/puter/runtime && echo eyJkb21haW4iOiAicmVsYXhlZC13ZWFzZWwtcHV0ZXIuY2xvdWQubmV4bGF5ZXIuYWkiLCAicHJvdG9jb2wiOiAiaHR0cHMiLCAidHJ1c3RfcHJveHkiOiAxLCAiYWxsb3dfYWxsX2hvc3RfdmFsdWVzIjogdHJ1ZSwgInN0YXRpY19ob3N0aW5nX2RvbWFpbiI6ICJzaXRlLnJlbGF4ZWQtd2Vhc2VsLXB1dGVyLmNsb3VkLm5leGxheWVyLmFpIiwgInN0YXRpY19ob3N0aW5nX2RvbWFpbl9hbHQiOiAiaG9zdC5yZWxheGVkLXdlYXNlbC1wdXRlci5jbG91ZC5uZXhsYXllci5haSIsICJwcml2YXRlX2FwcF9ob3N0aW5nX2RvbWFpbiI6ICJhcHAucmVsYXhlZC13ZWFzZWwtcHV0ZXIuY2xvdWQubmV4bGF5ZXIuYWkiLCAiZGF0YWJhc2UiOiB7ImVuZ2luZSI6ICJzcWxpdGUiLCAicGF0aCI6ICIvdG1wL3B1dGVyL3J1bnRpbWUvcHV0ZXItZGF0YWJhc2Uuc3FsaXRlIn0sICJzMyI6IHsibG9jYWxDb25maWciOiB7ImRhdGFEaXIiOiAiL3RtcC9wdXRlci9ydW50aW1lL2ZhdXhxcy1kYXRhIiwgInMzU3RvcmFnZURpciI6ICIvdG1wL3B1dGVyL3J1bnRpbWUvZmF1eHFzLXMzLWRhdGEifX0sICJkeW5hbW8iOiB7ImluTWVtb3J5IjogdHJ1ZX19 | base64 -d > /tmp/puter/config.json && export PUTER_CONFIG_PATH=/tmp/puter/config.json && exec node ./dist/src/backend/index.js"
     servicePorts:
     - 4100
     vars:
