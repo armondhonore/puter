@@ -231,6 +231,28 @@ export class PuterServer {
         // Cloudflare/nginx hop). Never `true` in prod: that trusts every hop
         // and makes XFF forgeable.
         this.#app.set('trust proxy', this.#config.trust_proxy ?? false);
+
+        // `subdomain offset` = how many trailing labels of the Host make up
+        // the registered domain. Express defaults to 2 (`example.com`), which
+        // is wrong whenever `config.domain` has more than two labels — e.g. a
+        // deploy host like `relaxed-weasel-puter.cloud.nexlayer.ai` (4 labels).
+        // With the default offset, Express reports `req.subdomains` as
+        // `['relaxed-weasel-puter','cloud']` for the apex, so (a) the
+        // user-subdomain redirect fires and bounces `/` to a certless
+        // `site.<host>` subdomain (browser ERR_SSL_PROTOCOL_ERROR), and (b) the
+        // root-only GUI route never matches (it requires zero subdomains) → the
+        // desktop UI 404s. Deriving the offset from `config.domain`'s label
+        // count makes the apex correctly report zero subdomains, so the GUI is
+        // served directly on the same host with no cross-host redirect. Genuine
+        // user-site hosts (`<sub>.<domain>`) still surface a real subdomain.
+        const apexDomain = (this.#config.domain ?? '').split(':')[0];
+        if (apexDomain) {
+            const labelCount = apexDomain.split('.').filter(Boolean).length;
+            if (labelCount >= 2) {
+                this.#app.set('subdomain offset', labelCount);
+            }
+        }
+
         this.#installGlobalMiddleware();
 
         // Instantiate drivers BEFORE controllers so controllers can receive

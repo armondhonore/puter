@@ -89,6 +89,22 @@ export const createUserSubdomainRedirect = (
         return (_req, _res, next) => next();
     }
 
+    // The apex GUI hostname (config.domain minus any port). A request whose
+    // host exactly equals this is the main desktop UI origin and must be
+    // served directly — never redirected to the static-hosting domain.
+    //
+    // Express derives `req.subdomains` with a fixed offset of 2 (last two
+    // labels = the registered domain). When `config.domain` itself has more
+    // than two labels (e.g. a deploy host like
+    // `relaxed-weasel-puter.cloud.nexlayer.ai`), Express misreports an inner
+    // label (`cloud`) as the "active subdomain", so the apex host wrongly
+    // satisfies the active-subdomain check below and gets 302-redirected to a
+    // `site.<host>` subdomain that has no TLS cert — the browser then fails
+    // with ERR_SSL_PROTOCOL_ERROR. Anchoring on an exact host==apex match
+    // (instead of Express's subdomain split) fixes that: a genuine user-site
+    // host is strictly `<sub>.<domain>` and never equals the apex.
+    const apexHost = domain.split(':')[0];
+
     const hostingDomains = [
         config.static_hosting_domain,
         config.static_hosting_domain_alt,
@@ -105,6 +121,12 @@ export const createUserSubdomainRedirect = (
 
         const host = (req.headers.host ?? '').toLowerCase();
         const hostName = host.split(':')[0];
+
+        // Apex GUI host — serve the desktop UI directly, no cross-host
+        // redirect. (Multi-label deploy hosts fool Express's subdomain
+        // splitter; anchor on the exact host==apex match instead.)
+        if (hostName === apexHost) return next();
+
         if (
             hostingDomains.some(
                 (d) => hostName === d || hostName.endsWith(`.${d}`),
