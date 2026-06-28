@@ -6,7 +6,7 @@
 # For THIS PROJECT's context (tech stack, env vars, secrets, live URL, pod topology)
 # read NEXLAYER.md in this repo. Both files together give a complete picture.
 #
-# TL;DR: push code to main → Nexlayer AI builds + deploys automatically.
+# TL;DR: push code to nexlayer → Nexlayer AI builds + deploys automatically.
 # Edit nexlayer.yaml to change topology. Edit Dockerfile to change the build.
 
 platform: nexlayer
@@ -17,7 +17,7 @@ project:
   runtime: 
   port: 80
   live_url: "https://relaxed-weasel-puter.cloud.nexlayer.ai"
-  deploy_branch: main
+  deploy_branch: nexlayer
   repo: "https://github.com/armondhonore/puter"
   config_files:
     - nexlayer.yaml          # deployment topology (pods, ports, env vars)
@@ -157,7 +157,7 @@ dockerfile:
 cicd:
   file: .github/workflows/nexlayer.yml
   triggers:
-    - "push to deploy branch (main) → production redeploy"
+    - "push to deploy branch (nexlayer) → production redeploy"
     - "pull_request → preview deploy, URL posted as PR comment"
     - "workflow_dispatch → on-demand from GitHub Actions tab (no commit required)"
   auth:
@@ -172,34 +172,34 @@ cicd:
 agent_tasks:
   description: >
     Step-by-step recipes for common tasks. Each recipe ends with
-    "push to main" — Nexlayer handles the rest automatically.
+    "push to nexlayer" — Nexlayer handles the rest automatically.
 
   add_postgres_database:
     steps:
       - "1. Add a 'db' pod to nexlayer.yaml pods: list (see patterns.with_postgres above)."
       - "2. Add DATABASE_URL to your app pod vars: using db.pod:5432 syntax."
       - "3. Install your DB client library (e.g. 'pg' for Node, 'psycopg2' for Python)."
-      - "4. Push to main — Nexlayer rebuilds and redeploys both pods together."
+      - "4. Push to nexlayer — Nexlayer rebuilds and redeploys both pods together."
     notes: "Nexlayer provisions the db pod in the same namespace — no external DB service needed."
 
   add_redis_cache:
     steps:
       - "1. Add a 'cache' pod with image mirror.gcr.io/library/redis:7-alpine, port 6379."
       - "2. Add REDIS_URL var to your app pod: redis://cache.pod:6379"
-      - "3. Push to main."
+      - "3. Push to nexlayer."
 
   change_exposed_port:
     steps:
       - "1. Update Dockerfile: EXPOSE <new-port>"
       - "2. Update nexlayer.yaml: servicePorts: [<new-port>]"
-      - "3. Push to main."
+      - "3. Push to nexlayer."
     warning: "Port in Dockerfile and nexlayer.yaml must match or the deploy will be unreachable."
 
   add_environment_variable:
     steps:
       - "1. Add to nexlayer.yaml under the relevant pod's vars:"
       - "   - {key: MY_VAR, value: my-value}"
-      - "2. Push to main."
+      - "2. Push to nexlayer."
     notes: >
       For secrets, use the Nexlayer dashboard to set encrypted vars instead of
       committing them to nexlayer.yaml.
@@ -213,7 +213,7 @@ agent_tasks:
   update_base_image:
     steps:
       - "1. Edit Dockerfile FROM line using mirror.gcr.io/library/<image>:<new-tag>."
-      - "2. Push to main — Nexlayer rebuilds with the new base."
+      - "2. Push to nexlayer — Nexlayer rebuilds with the new base."
     warning: "Always use mirror.gcr.io/library/ prefix — bare image names hit Docker Hub rate limits."
 
 # ── PLATFORM CAPABILITIES ────────────────────────────────────────────────────

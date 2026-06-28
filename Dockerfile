@@ -15,6 +15,15 @@
 
 # ---- Build stage ----
 FROM node:24-slim AS build
+# build-time env seeded from .env.example
+ENV HTTP_PORT=80
+ENV MARIADB_DATABASE=puter
+ENV MARIADB_PASSWORD=replace-with-strong-password
+ENV MARIADB_ROOT_PASSWORD=replace-with-strong-password
+ENV MARIADB_USER=puter
+ENV S3_ACCESS_KEY=puter
+ENV S3_BUCKET=puter-local
+ENV S3_SECRET_KEY=replace-with-strong-secret
 
 WORKDIR /opt/puter
 

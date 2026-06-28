@@ -2,14 +2,14 @@
 
 **Live:** [https://relaxed-weasel-puter.cloud.nexlayer.ai](https://relaxed-weasel-puter.cloud.nexlayer.ai)  
 
-**Runtime:**  · **Port:** auto-detected · **Deploy branch:** main
+**Runtime:**  · **Port:** auto-detected · **Deploy branch:** nexlayer
 
 ---
 
 ## How this deployment works
 
 **puter** is deployed on [Nexlayer](https://nexlayer.ai) — a container-native
-platform where every push to `main` triggers a fully automated build-and-deploy
+platform where every push to `nexlayer` triggers a fully automated build-and-deploy
 pipeline with no infrastructure management required:
 
 1. **AI analysis** — the Nexlayer agent reads your repo, understands your runtime,
@@ -39,20 +39,32 @@ application:
   name: puter
   pods:
   - name: app
-    image: ghcr.io/puter-software/puter:latest
+    image: ghcr.io/heyputer/puter:latest
     path: /
+    # Two fixes baked into the boot command (string form per the redeploy schema):
+    #
+    # 1) Skip the broken telemetry preload. The published image's default CMD is
+    #    `node -r ./dist/src/backend/telemetry.js ./dist/src/backend/index.js`, but
+    #    telemetry.js requires @opentelemetry/auto-instrumentations-node — declared in
+    #    src/backend/package.json yet MISSING from the stale published image, so the
+    #    container crashloops with MODULE_NOT_FOUND. telemetry.js is a standalone OTLP
+    #    exporter (index.js never imports it; no collector here), so we boot index.js
+    #    directly without the -r preload.
+    #
+    # 2) Write a runtime config override to a node-writable path. The image runs as
+    #    USER node, but /opt/puter (and any PVC mounted over it) is root-owned, so
+    #    puter's default relative data paths (volatile/runtime/*) fail with EACCES.
+    #    We point sqlite + the local S3 (fauxqs) at /tmp/puter (world-writable) and run
+    #    DynamoDB (dynalite) in-memory so nothing needs a persistent root-owned mount.
+    #    We also set domain/protocol/static-hosting domains to the deploy host so the
+    #    app recognizes the public host instead of 404-ing on the default puter.localhost.
+    #    (Data is ephemeral — fine for this test deployment.)
+    command: sh -c "mkdir -p /tmp/puter/runtime && echo eyJkb21haW4iOiAicmVsYXhlZC13ZWFzZWwtcHV0ZXIuY2xvdWQubmV4bGF5ZXIuYWkiLCAicHJvdG9jb2wiOiAiaHR0cHMiLCAiYWxsb3dfYWxsX2hvc3RfdmFsdWVzIjogdHJ1ZSwgInN0YXRpY19ob3N0aW5nX2RvbWFpbiI6ICJzaXRlLnJlbGF4ZWQtd2Vhc2VsLXB1dGVyLmNsb3VkLm5leGxheWVyLmFpIiwgInN0YXRpY19ob3N0aW5nX2RvbWFpbl9hbHQiOiAiaG9zdC5yZWxheGVkLXdlYXNlbC1wdXRlci5jbG91ZC5uZXhsYXllci5haSIsICJwcml2YXRlX2FwcF9ob3N0aW5nX2RvbWFpbiI6ICJhcHAucmVsYXhlZC13ZWFzZWwtcHV0ZXIuY2xvdWQubmV4bGF5ZXIuYWkiLCAiZGF0YWJhc2UiOiB7ImVuZ2luZSI6ICJzcWxpdGUiLCAicGF0aCI6ICIvdG1wL3B1dGVyL3J1bnRpbWUvcHV0ZXItZGF0YWJhc2Uuc3FsaXRlIn0sICJzMyI6IHsibG9jYWxDb25maWciOiB7ImRhdGFEaXIiOiAiL3RtcC9wdXRlci9ydW50aW1lL2ZhdXhxcy1kYXRhIiwgInMzU3RvcmFnZURpciI6ICIvdG1wL3B1dGVyL3J1bnRpbWUvZmF1eHFzLXMzLWRhdGEifX0sICJkeW5hbW8iOiB7ImluTWVtb3J5IjogdHJ1ZX19 | base64 -d > /tmp/puter/config.json && export PUTER_CONFIG_PATH=/tmp/puter/config.json && exec node ./dist/src/backend/index.js"
     servicePorts:
     - 4100
     vars:
       PUTER_DEFAULT_USER: admin
       PUTER_DEFAULT_USER_PASSWORD: nexlayer2024
-    volumes:
-    - name: puter-config
-      mountPath: /etc/puter
-      size: 1Gi
-    - name: puter-data
-      mountPath: /var/puter
-      size: 20Gi
 ```
 
 **Common edits:**
@@ -74,7 +86,7 @@ only regenerates it if you delete it or on the very first deploy.
 ### `.github/workflows/nexlayer.yml` — CI/CD
 
 Triggers on:
-- **Push** to `main` → production redeploy
+- **Push** to `nexlayer` → production redeploy
 - **Pull request** → preview deploy with a unique URL posted as a PR comment
 - **Manual** → run on demand from the Actions tab (no commit required)
 
@@ -91,7 +103,7 @@ include this context in your prompt:
 > *"This project is deployed on Nexlayer. The deployment manifest is `nexlayer.yaml`.
 > The container exposes port auto-detected. When adding a new service (database, cache,
 > worker), add it as a new pod in `nexlayer.yaml` and reference it with
-> `<podName>.pod:<port>` syntax. CI/CD runs on push to `main`."*
+> `<podName>.pod:<port>` syntax. CI/CD runs on push to `nexlayer`."*
 
 The `nexlayer.skills` file in this repo gives agents structured guidance on the
 Nexlayer platform, including schema reference, common patterns, and anti-patterns.
