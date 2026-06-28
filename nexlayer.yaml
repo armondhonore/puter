@@ -2,7 +2,15 @@ application:
   name: puter
   pods:
   - name: app
+    image: ghcr.io/heyputer/puter:latest
     path: /
+    # The published image's default CMD preloads dist/src/backend/telemetry.js
+    # (node -r ...telemetry.js), which requires @opentelemetry/auto-instrumentations-node
+    # — a dep that is declared in src/backend/package.json but MISSING from the stale
+    # published image, so the container crashloops with MODULE_NOT_FOUND. telemetry.js
+    # is a standalone OTLP exporter preload (index.js never imports it) and there is no
+    # OTLP collector here anyway, so we simply boot index.js without the preload.
+    command: ["sh", "-c", "node ./dist/src/backend/index.js"]
     servicePorts:
     - 4100
     vars:
